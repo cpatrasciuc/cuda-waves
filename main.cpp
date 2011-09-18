@@ -1,45 +1,46 @@
-#include <cstdio>
+#include <GL/gl.h>
+#include <GL/glu.h>
+#include <GL/freeglut.h>
 
-#include <cuda.h>
-#include <cuda_runtime_api.h>
+#define WIDTH 400
+#define HEIGHT 400
 
-#include "util.h"
+unsigned char bitmap[WIDTH][HEIGHT];
 
-#define N 10
-
-__global__ void add(int *a, int *b, int *c)
+void computeBitmap()
 {
-    int i = blockIdx.x;
-    c[i] = a[i] + b[i];
+    for (int i = 0; i < WIDTH; i++)
+    {
+        if (i % 20 < 10)
+        {
+            for (int j = 0; j < HEIGHT; j++)
+            {
+                bitmap[i][j] = 255;
+            }
+        }
+    }
+}
+
+void display(void)
+{
+    computeBitmap();
+    glClear(GL_COLOR_BUFFER_BIT);
+    glColor3f (1.0, 1.0, 1.0);
+    glRasterPos2i(-1, -1);
+    glDrawPixels(WIDTH, HEIGHT, GL_LUMINANCE, GL_UNSIGNED_BYTE, bitmap);
+    glFlush();
 }
 
 int main(int argc, char **argv)
 {
-    int a[N], b[N], c[N];
-    int *dev_a, *dev_b, *dev_c;
-
-    for (int i = 0; i < N; i++)
-    {
-        a[i] = i;
-        b[i] = i * i;
-    }
-    printArray(a, N, "A");
-    printArray(b, N, "B");
-
-    cudaMalloc((void**)&dev_a, N * sizeof(int));
-    cudaMalloc((void**)&dev_b, N * sizeof(int));
-    cudaMalloc((void**)&dev_c, N * sizeof(int));
-
-    cudaMemcpy(dev_a, a, N * sizeof(int), cudaMemcpyHostToDevice);
-    cudaMemcpy(dev_b, b, N * sizeof(int), cudaMemcpyHostToDevice);
-
-    add<<<N,1>>>(dev_a, dev_b, dev_c);
-
-    cudaMemcpy(&c, dev_c, N * sizeof(int), cudaMemcpyDeviceToHost);
-
-    printArray(c, N, "C");
-
-    cudaFree(dev_a);
-    cudaFree(dev_b);
-    cudaFree(dev_c);
+    glutInit(&argc, argv);
+    glutInitDisplayMode(GLUT_SINGLE | GLUT_RGB);
+    glutInitWindowSize(WIDTH, HEIGHT);
+    glutInitWindowPosition(100, 100);
+    glutCreateWindow("CUDA Demo");
+    glPixelStorei (GL_UNPACK_ALIGNMENT, 1);
+    glClearColor (0.0, 1.0, 0.0, 0.0);
+    glutDisplayFunc(display);
+    
+    glutMainLoop();
 }

@@ -1,7 +1,9 @@
 CUDADIR ?= /usr/local/cuda/
 EXENAME = cuda_demo
 
-all:
+all: build run clean
+
+build:
 	cp main.cpp main.cu
 	$(CUDADIR)/bin/nvcc --compiler-bindir=compilers/ --library glut -o $(EXENAME) main.cu 
 
