@@ -3,24 +3,43 @@
 #include <cuda.h>
 #include <cuda_runtime_api.h>
 
-__global__ void add(int a, int b, int *c)
+#include "util.h"
+
+#define N 10
+
+__global__ void add(int *a, int *b, int *c)
 {
-    *c = a + b;
+    int i = blockIdx.x;
+    c[i] = a[i] + b[i];
 }
 
-int main()
+int main(int argc, char **argv)
 {
-    int c;
-    int *dev_c;
-    int r;
+    int a[N], b[N], c[N];
+    int *dev_a, *dev_b, *dev_c;
 
-    cudaMalloc((void**)&dev_c, sizeof(int));
+    for (int i = 0; i < N; i++)
+    {
+        a[i] = i;
+        b[i] = i * i;
+    }
+    printArray(a, N, "A");
+    printArray(b, N, "B");
 
-    add<<<1,1>>>(3, 5, dev_c);
+    cudaMalloc((void**)&dev_a, N * sizeof(int));
+    cudaMalloc((void**)&dev_b, N * sizeof(int));
+    cudaMalloc((void**)&dev_c, N * sizeof(int));
 
-    cudaMemcpy(&c, dev_c, sizeof(int), cudaMemcpyDeviceToHost);
+    cudaMemcpy(dev_a, a, N * sizeof(int), cudaMemcpyHostToDevice);
+    cudaMemcpy(dev_b, b, N * sizeof(int), cudaMemcpyHostToDevice);
 
-    printf("%d\n", c);
-    
+    add<<<N,1>>>(dev_a, dev_b, dev_c);
+
+    cudaMemcpy(&c, dev_c, N * sizeof(int), cudaMemcpyDeviceToHost);
+
+    printArray(c, N, "C");
+
+    cudaFree(dev_a);
+    cudaFree(dev_b);
     cudaFree(dev_c);
 }
