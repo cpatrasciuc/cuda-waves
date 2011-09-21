@@ -6,10 +6,13 @@
 #include <GL/glu.h>
 #include <GL/freeglut.h>
 
+#include <cuda.h>
+#include <cuda_runtime_api.h>
+
 #include "wave.h"
 
-#define WIDTH 700
-#define HEIGHT 700
+#define WIDTH 640
+#define HEIGHT 640
 
 #define WAVES_COUNT 4
 
@@ -23,20 +26,27 @@ Wave waves[WAVES_COUNT] =
 
 unsigned char bitmap[WIDTH][HEIGHT];
 
-void computeBitmap(float t)
+unsigned char *dev_bitmap;
+int *dev_t;
+Wave *dev_waves;
+
+dim3 grids(WIDTH/16, HEIGHT/16);
+dim3 threads(16, 16);
+
+__global__ void computeBitmap(int t, unsigned char *bitmap)
 {
-    for (int i = 0; i < WIDTH; i++)
+    int i = threadIdx.x + blockIdx.x * blockDim.x;
+    int j = threadIdx.y + blockIdx.y * blockDim.y;
+
+    float sum = 0.0;
+    for (int k = 0; k < WAVES_COUNT; k++)
     {
-        for (int j = 0; j < HEIGHT; j++)
-        {
-            float sum = 0.0;
-            for (int k = 0; k < WAVES_COUNT; k++)
-            {
-                sum += computeWave(&waves[k], i, j, t);
-            }
-            bitmap[i][j] = sum / WAVES_COUNT  + (255 / 2);
-        }
+        Wave *w = dev_waves[k];
+        float tmp = std::sin((w->dx * x + w->dy * y) / w->wavelength +
+                             t * w->speed * 0.01 + w->phase) + 1;
+        sum += w->amplitude * tmp * tmp / 2.0;
     }
+    bitmap[i][j] = sum / WAVES_COUNT  + (255 / 2);
 }
 
 void display(void)
@@ -47,7 +57,9 @@ void display(void)
     gettimeofday(&start, NULL);
 
     t += 10;
-    computeBitmap((float) t);
+    cudaMemcpy(dev_t, &t, sizeof(int), cudaMemcpyHostToDevice);
+
+    computeBitmap<<<grids, threads>>>(t, dev_bitmap);
 
     gettimeofday(&end_compute, NULL);
 
@@ -76,5 +88,15 @@ int main(int argc, char **argv)
     glClearColor (0.0, 1.0, 0.0, 0.0);
     glutIdleFunc(display);
 
+    cudaMalloc((void**)&dev_bitmap, WIDTH * HEIGHT * sizeof(unsigned char));
+    cudaMalloc((void**)&dev_t, sizeof(int));
+    cudaMalloc((void**)&dev_waves, WAVES_COUNT * sizeof(Wave));
+
+    cudaMemcpy(dev_waves, waves, WAVES_COUNT * sizeof(Wave));
+
     glutMainLoop();
+
+    cudaFree(dev_bitmap);
+    cudaFree(dev_t);
+    cudaFree(dev_waves);
 }
