@@ -28,12 +28,12 @@ unsigned char bitmap[WIDTH][HEIGHT];
 
 unsigned char *dev_bitmap;
 int *dev_time;
-Wave *dev_waves;
+__constant__ Wave dev_waves[WAVES_COUNT];
 
 dim3 grids(WIDTH/16, HEIGHT/16);
 dim3 threads(16, 16);
 
-__global__ void computeBitmap(Wave *dev_waves, int *t, unsigned char *bitmap)
+__global__ void computeBitmap(int *t, unsigned char *bitmap)
 {
     int x = threadIdx.x + blockIdx.x * blockDim.x;
     int y = threadIdx.y + blockIdx.y * blockDim.y;
@@ -44,8 +44,6 @@ __global__ void computeBitmap(Wave *dev_waves, int *t, unsigned char *bitmap)
         Wave w = dev_waves[k];
         float tmp = sin((w.dx * x + w.dy * y) / w.wavelength +
                              *t * w.speed * 0.001 + w.phase) + 1;
-       /* float tmp = sin((w->dx * x + w->dy * y) / w->wavelength +
-                                     *t * w->speed * 0.001 + w->phase) + 1;*/
         sum += w.amplitude * tmp * tmp / 2.0;
     }
     bitmap[x*WIDTH + y] = sum / WAVES_COUNT  + (255 / 2);
@@ -66,7 +64,7 @@ void display(void)
     t += 10;
     cudaMemcpy(dev_time, &t, sizeof(int), cudaMemcpyHostToDevice);
 
-    computeBitmap<<<grids, threads>>>(dev_waves, dev_time, dev_bitmap);
+    computeBitmap<<<grids, threads>>>(dev_time, dev_bitmap);
 
     cudaMemcpy(bitmap, dev_bitmap, WIDTH * HEIGHT * sizeof(unsigned char), cudaMemcpyDeviceToHost);
 
@@ -107,9 +105,8 @@ int main(int argc, char **argv)
 
     cudaMalloc((void**)&dev_bitmap, WIDTH * HEIGHT * sizeof(unsigned char));
     cudaMalloc((void**)&dev_time, sizeof(int));
-    cudaMalloc((void**)&dev_waves, WAVES_COUNT * sizeof(Wave));
 
-    cudaMemcpy(dev_waves, waves, WAVES_COUNT * sizeof(Wave), cudaMemcpyHostToDevice);
+    cudaMemcpyToSymbol(dev_waves, waves, WAVES_COUNT * sizeof(Wave));
 
     glutMainLoop();
 
