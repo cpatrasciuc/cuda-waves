@@ -2,12 +2,16 @@
 #include <sys/time.h>
 #include <stdio.h>
 
+#define GL_GLEXT_PROTOTYPES
 #include <GL/gl.h>
 #include <GL/glu.h>
+#include <GL/glx.h>
+#include <GL/glext.h>
 #include <GL/freeglut.h>
 
 #include <cuda.h>
 #include <cuda_runtime_api.h>
+#include <cuda_gl_interop.h>
 
 #include "wave.h"
 
@@ -32,6 +36,9 @@ __constant__ Wave dev_waves[WAVES_COUNT];
 
 dim3 grids(WIDTH/16, HEIGHT/16);
 dim3 threads(16, 16);
+
+GLuint buffer;
+cudaGraphicsResource *resource;
 
 __global__ void computeBitmap(int *t, unsigned char *bitmap)
 {
@@ -64,9 +71,13 @@ void display(void)
     t += 10;
     cudaMemcpy(dev_time, &t, sizeof(int), cudaMemcpyHostToDevice);
 
+    size_t size;
+    cudaGraphicsMapResources(1, &resource);
+    cudaGraphicsResourceGetMappedPointer((void**)&dev_bitmap, &size, resource);
+
     computeBitmap<<<grids, threads>>>(dev_time, dev_bitmap);
 
-    cudaMemcpy(bitmap, dev_bitmap, WIDTH * HEIGHT * sizeof(unsigned char), cudaMemcpyDeviceToHost);
+    cudaGraphicsUnmapResources(1, &resource);
 
     cudaEventRecord(stop_event, 0);
     cudaEventSynchronize(stop_event);
@@ -76,7 +87,7 @@ void display(void)
     glClear(GL_COLOR_BUFFER_BIT);
     glColor3f (1.0, 1.0, 1.0);
     glRasterPos2i(-1, -1);
-    glDrawPixels(WIDTH, HEIGHT, GL_LUMINANCE, GL_UNSIGNED_BYTE, bitmap);
+    glDrawPixels(WIDTH, HEIGHT, GL_LUMINANCE, GL_UNSIGNED_BYTE, NULL);
     glutSwapBuffers();
     glutPostRedisplay();
 
@@ -94,6 +105,10 @@ void display(void)
 
 int main(int argc, char **argv)
 {
+    int device;
+    cudaGetDevice(&device);
+    cudaGLSetGLDevice(device);
+
     glutInit(&argc, argv);
     glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB);
     glutInitWindowSize(WIDTH, HEIGHT);
@@ -103,14 +118,17 @@ int main(int argc, char **argv)
     glClearColor (0.0, 1.0, 0.0, 0.0);
     glutIdleFunc(display);
 
-    cudaMalloc((void**)&dev_bitmap, WIDTH * HEIGHT * sizeof(unsigned char));
+    glGenBuffers( 1, &buffer );
+    glBindBuffer( GL_PIXEL_UNPACK_BUFFER_ARB, buffer );
+    glBufferData( GL_PIXEL_UNPACK_BUFFER_ARB, WIDTH * HEIGHT, NULL, GL_DYNAMIC_DRAW_ARB );
+
+    cudaGraphicsGLRegisterBuffer(&resource, buffer, cudaGraphicsMapFlagsWriteDiscard);
+
     cudaMalloc((void**)&dev_time, sizeof(int));
 
     cudaMemcpyToSymbol(dev_waves, waves, WAVES_COUNT * sizeof(Wave));
 
     glutMainLoop();
 
-    cudaFree(dev_bitmap);
-    cudaFree(dev_time);
-    cudaFree(dev_waves);
+    cudaGraphicsUnregisterResource(resource);
 }
