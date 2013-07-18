@@ -3,8 +3,7 @@ cuda-waves
 
 Demo application that simulates some waves using the CUDA platform.
 
-How to use
-==========
+###### How to use
 
 Install [CUDA](http://www.nvidia.com/object/cuda_home_new.html). Then, make sure the symlinks in the compilers/ folder point to valid executables on your system.
 
